@@ -3,6 +3,15 @@ tmp/
 build/
 devices/*/kernel.zip
 devices/*/vendor_boot.img
->>>>>>> 8398d16 (QOL: Switch to rust-based payload-dumper in order to increase efficiency)
 cache/
 /*.zip
+
+# root-level scratch/diagnostic files from debugging sessions only --
+# does NOT touch anything under devices/kebab/ (our real assets)
+/*.txt
+/*.log
+/*.so
+/*.apex
+*:Zone.Identifier
+__pycache__/
+*.pyc

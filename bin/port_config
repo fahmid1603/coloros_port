@@ -13,5 +13,5 @@ repack_with_ext4=false
 remove_data_encryption=false
 
 # Needed to manually extend super partition, in order to flash it successfully. 
-super_extended=false
+super_extended=true
 pack_method=stock

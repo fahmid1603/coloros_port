@@ -175,20 +175,6 @@ is_property_exists () {
     fi
 }
 
-disable_avb_verify() {
-    fstab=$1
-    blue "Disabling avb_verify: $fstab"
-    if [[ ! -f $fstab ]]; then
-        yellow "$fstab not found, please check it manually"
-    else
-        sed -i "s/,avb_keys=.*avbpubkey//g" $fstab
-        sed -i "s/,avb=vbmeta_system//g" $fstab
-        sed -i "s/,avb=vbmeta_vendor//g" $fstab
-        sed -i "s/,avb=vbmeta//g" $fstab
-        sed -i "s/,avb//g" $fstab
-    fi
-}
-
 extract_partition() {
     part_img=$1
     part_name=$(basename ${part_img})

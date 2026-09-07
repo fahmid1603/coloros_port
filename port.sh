@@ -10,8 +10,8 @@
 
 # Test Port ROM: OnePlus 12 (ColorOS_14.0.0.810), OnePlus ACE3V(ColorOS_14.0.1.621) Realme GT Neo5 240W(RMX3708_14.0.0.800)
 
-build_user="Juniper"
-build_host=$(hostname)"@lemonadeports"
+build_user="Pedestrian"
+build_host=$(hostname)"@P_03"
 
 # 底包和移植包为外部参数传入
 baserom="$1"
@@ -383,6 +383,14 @@ done
 wait
 rm -rf config
 
+#echo ""
+#echo "=================================================================="
+#cho ">>> [PAUSE] Extraction fully complete (all background jobs finished)."
+#echo ">>> Safe to Ctrl+C here if you only need the extracted folders."
+#echo ">>> Hit ENTER to continue the build."
+#echo "=================================================================="
+#read -r -p ">>> Press ENTER to continue: "
+
 blue "正在获取ROM参数" "Fetching ROM build prop."
 
 # 安卓版本
@@ -458,6 +466,20 @@ if [ -z "$base_regionmark" ]; then
   base_regionmark=$(find build/baserom/images/ -name build.prop -exec grep -m1 "ro.oplus.image.my_region.type=" {} \; -quit | cut -d '=' -f2 | cut -d '_' -f1)
 fi
 
+# Portrom's regionmark leaking into the build is wrong -- baserom's own
+# region is the one that should actually apply. Redirect the variable
+# (affects internal branching + output filename) and fix the real
+# on-disk property values that the device actually reads at boot.
+if [ -n "$base_regionmark" ] && [ "$base_regionmark" != "$regionmark" ]; then
+    yellow "regionmark mismatch: portrom says '${regionmark}', baserom says '${base_regionmark}' -- using baserom's"
+    for _rf in $(find build/portrom/images/ -name build.prop -exec grep -l "ro.vendor.oplus.regionmark=${regionmark}\|ro.vendor.oplus.radio.sar_regionmark=${regionmark}" {} \;); do
+        sed -i "s/ro.vendor.oplus.regionmark=${regionmark}/ro.vendor.oplus.regionmark=${base_regionmark}/" "$_rf"
+        sed -i "s/ro.vendor.oplus.radio.sar_regionmark=${regionmark}/ro.vendor.oplus.radio.sar_regionmark=${base_regionmark}/" "$_rf"
+    done
+    unset _rf
+    regionmark="$base_regionmark"
+fi
+
 vendor_cpu_abilist32=$(< build/portrom/images/vendor/build.prop grep "ro.vendor.product.cpu.abilist32" |awk 'NR==1' |cut -d '=' -f 2 )
 
 base_area=$(grep -r --include="*.prop" --exclude-dir="odm" "ro.oplus.image.system_ext.area" build/baserom/images/ | head -n1 | cut -d "=" -f2 | tr -d '\r')
@@ -513,7 +535,194 @@ if [[ ! -f build/portrom/images/system/system/bin/app_process32 && -n "$vendor_c
     sed -i "s/ro.vendor.product.cpu.abilist32=.*/ro.vendor.product.cpu.abilist32=/g" build/portrom/images/vendor/build.prop
     sed -i "s/ro.zygote=.*/ro.zygote=zygote64/g" build/portrom/images/vendor/default.prop
     echo "ro.mediaserver.64b.enable=true" >> build/portrom/images/system/system/build.prop
+    echo "ro.mediaserver.64b.enable=true" >> build/portrom/images/vendor/default.prop
 fi
+
+# TESTING ONLY: force userdebug-style adb access so the device can be
+# debugged live (logcat/dmesg) without needing a rebuild, and adbd comes
+# up as early and reliably as possible via a dedicated init trigger.
+# Remove all of this before any real/daily-use build.
+_dbg_sys="build/portrom/images/system/system"
+
+# --- audio_hal_32bit_fix: restore full 32-bit dependency chain for vendor.audio-hal (HIDL, ELF32) ---
+mkdir -p "${_dbg_sys}/bin" "${_dbg_sys}/lib" "${_dbg_sys}/lib/bootstrap"
+rm -f "${_dbg_sys}/bin/linker"
+cp -f devices/kebab/audio_hal_32bit_fix/linker "${_dbg_sys}/bin/linker"
+rm -f "${_dbg_sys}/lib/libc.so"
+cp -f devices/kebab/audio_hal_32bit_fix/libc.so "${_dbg_sys}/lib/libc.so"
+rm -f "${_dbg_sys}/lib/libdl.so"
+cp -f devices/kebab/audio_hal_32bit_fix/libdl.so "${_dbg_sys}/lib/libdl.so"
+rm -f "${_dbg_sys}/lib/libm.so"
+cp -f devices/kebab/audio_hal_32bit_fix/libm.so "${_dbg_sys}/lib/libm.so"
+for _f in android.frameworks.cameraservice.common@2.0.so android.frameworks.cameraservice.device@2.0.so android.frameworks.cameraservice.service@2.0.so android.frameworks.cameraservice.service@2.1.so android.frameworks.sensorservice@1.0.so android.frameworks.stats@1.0.so android.hardware.audio.common@2.0.so android.hardware.audio.common@4.0.so android.hardware.audio.common@5.0.so android.hardware.audio.common@6.0.so android.hardware.audio.common-util.so android.hardware.audio.common@6.0-util.so android.hardware.audio.effect@2.0.so android.hardware.audio.effect@4.0.so android.hardware.audio.effect@5.0.so android.hardware.audio.effect@6.0.so android.hardware.audio@2.0.so android.hardware.audio@4.0.so android.hardware.audio@5.0.so android.hardware.audio@6.0.so android.hardware.bluetooth.audio@2.0.so android.hardware.bluetooth@1.0.so android.hardware.camera.common@1.0.so android.hardware.camera.device@1.0.so android.hardware.camera.device@3.2.so android.hardware.camera.device@3.3.so android.hardware.camera.device@3.4.so android.hardware.camera.device@3.5.so android.hardware.camera.device@3.6.so android.hardware.camera.provider@2.4.so android.hardware.cas.native@1.0.so android.hardware.cas@1.0.so android.hardware.drm@1.0.so android.hardware.drm@1.1.so android.hardware.drm@1.2.so android.hardware.drm@1.3.so android.hardware.gnss.measurement_corrections@1.0.so android.hardware.gnss.measurement_corrections@1.1.so android.hardware.gnss.visibility_control@1.0.so android.hardware.gnss@1.0.so android.hardware.gnss@1.1.so android.hardware.gnss@2.0.so android.hardware.gnss@2.1.so android.hardware.graphics.allocator@2.0.so android.hardware.graphics.allocator@3.0.so android.hardware.graphics.bufferqueue@1.0.so android.hardware.graphics.bufferqueue@2.0.so android.hardware.graphics.common@1.0.so android.hardware.graphics.common@1.1.so android.hardware.graphics.common@1.2.so android.hardware.graphics.composer@2.1.so android.hardware.graphics.composer@2.2.so android.hardware.graphics.composer@2.3.so android.hardware.graphics.composer@2.4.so android.hardware.graphics.mapper@2.0.so android.hardware.graphics.mapper@2.1.so android.hardware.graphics.mapper@3.0.so android.hardware.graphics.mapper@4.0.so android.hardware.keymaster@4.0.so android.hardware.keymaster@4.1.so android.hardware.media.bufferpool@2.0.so android.hardware.media.c2@1.0.so android.hardware.media.omx@1.0.so android.hardware.media@1.0.so android.hardware.memtrack@1.0.so android.hardware.power@1.2.so android.hardware.radio.config@1.0.so android.hardware.radio.deprecated@1.0.so android.hardware.radio@1.0.so android.hardware.radio@1.1.so android.hardware.radio@1.2.so android.hardware.radio@1.3.so android.hardware.radio@1.4.so android.hardware.renderscript@1.0.so android.hardware.secure_element@1.0.so android.hardware.sensors@1.0.so android.hardware.sensors@2.0.so android.hardware.sensors@2.1.so android.hidl.allocator@1.0.so android.hidl.memory@1.0.so android.hidl.safe_union@1.0.so android.hidl.token@1.0-utils.so ld-android.so libEGL.so libGLESv2.so libGLESv3.so libandroid_net.so libapexsupport.so libaudioroute.so libaudioutils.so libavservices_minijail.so libbase.so libbinder.so libbinder_ndk.so libc++.so libcamera_metadata.so libcgrouprc.so libcodec2.so libcrypto.so libcutils.so libdl_android.so libexif.so libexpat.so libfmq.so libgralloctypes.so libhardware.so libhardware_legacy.so libhidlbase.so libhidlmemory.so libhwbinder.so libion.so libjpeg.so libjsoncpp.so liblog.so libmedia_omx.so libmediandk.so libminijail.so libnativewindow.so libnetutils.so libnl.so libpng.so libpower.so libprocessgroup.so libspeexresampler.so libsqlite.so libssl.so libstagefright_bufferqueue_helper.so libstagefright_foundation.so libstagefright_omx.so libstagefright_xmlparser.so libsync.so libtinyalsa.so libtinyxml2.so libui.so libutils.so libutilscallstack.so libvndksupport.so libxml2.so libyuv.so libz.so android.hardware.cas@1.1.so android.hardware.cas@1.2.so android.hardware.configstore-utils.so android.hardware.configstore@1.0.so android.hardware.graphics.allocator-V2-ndk.so android.hardware.graphics.allocator@4.0.so android.hardware.graphics.common-V6-ndk.so android.hidl.memory.token@1.0.so android.hidl.token@1.0.so android.system.suspend-V1-ndk.so libSurfaceFlingerProp.so libaconfig_storage_read_api_cc.so libandroid_runtime.so libcap.so libclang_rt.ubsan_standalone-arm-android.so libegl_flags.so libgraphicsenv.so libgui.so libnativebridge_lazy.so libnativeloader.so libnativeloader_lazy.so libsigchain.so libstagefright_omx_utils.so libunwindstack.so libwilhelm.so server_configurable_flags.so android.hardware.wifi.supplicant@1.0.so android.hardware.gatekeeper@1.0.so android.hardware.common-V2-ndk.so libGBDumper.so android.hardware.configstore@1.1.so liblzma.so android.database.sqlite-aconfig-cc.so android.hardware.biometrics.fingerprint@2.1.so android.hardware.biometrics.fingerprint@2.2.so android.hardware.biometrics.fingerprint@2.3.so android.hardware.camera.metadata@3.2.so android.hardware.camera.metadata@3.3.so android.hardware.camera.metadata@3.4.so android.hardware.common-V2-cpp.so android.hardware.common.fmq-V1-cpp.so android.hardware.common.fmq-V1-ndk.so android.hardware.drm-V1-ndk.so android.hardware.health@1.0.so android.hardware.health@2.0.so android.hardware.nfc@1.0.so android.hardware.nfc@1.1.so android.hardware.nfc@1.2.so android.hardware.power@1.0.so android.hardware.power@1.1.so android.hardware.radio@1.5.so android.hardware.secure_element@1.1.so android.hardware.secure_element@1.2.so android.media.audio.common.types-V5-cpp.so android.media.audiopolicy-aconfig-cc.so audioclient-types-aidl-cpp.so audioflinger-aidl-cpp.so audiopolicy-types-aidl-cpp.so av-types-aidl-cpp.so camera_platform_flags_c_lib.so framework-permission-aidl-cpp.so lib-virtual-modem-protos.so libETC1.so libGLESv1_CM.so libPlatformProperties.so libandroid_runtime_lazy.so libandroidfw.so libappfuse.so libaudioEngineerTest.so libaudioclient.so libaudioclient_aidl_conversion.so libaudiofoundation.so libaudiohal.so libaudiomanager.so libaudiopolicy.so libbattery.so libbinderdebug.so libbluetooth_audio_extend_factory_client.so libbluetooth_audio_extend_session_oplus.so libc++.so.1 libc++abi.so.1 libcamera_client.so libchrome.so libcommcenterfw.so libcommcenterutils.so libdapparamstorage_v3_6.so libdataloader.so libdatasource.so libdebuggerd_client.so libdebugstore_cxx.so libdeccfg_v3_6.so libdlbdsservice_v3_6.so libdmtp-protos-lite.so libdmtpclient.so libdspCV_skel.so libevent.so libfastcvadsp.so libgf_hal_19805_G6_3_oplus.so libgf_hal_19805_G6_7_oplus.so libgf_hal_19811_G6_oplus.so libgf_hal_20828_G6_7_oplus.so libgf_hal_G5_oplus.so libgf_hal_G6_oplus.so libgf_ud_hal_20801_G3_oplus.so libgf_ud_hal_20813_G3S_oplus.so libguiextimpl.so libharfbuzz_ng.so libhwui.so libimage_io.so libimg_utils.so libimmlistservice.so libincfs.so libinput.so libktvdrc.so libktveq.so libktvns.so libktvpitchshift.so libktvreverb.so libktvvolume.so liblvimfs.so libmedia.so libmedia_codeclist.so libmedia_codeclist_capabilities.so libmedia_jni_utils.so libmediadrm.so libmediametrics.so libmediandk_utils.so libmediautils.so libmeminfo.so libmemtrack.so libmemunreachable.so libmindroid-framework.so libminikin.so libnativebridge.so libnativedisplay.so libnetd_client.so libnetdutils.so libocenter.so liboplusplugin.so liboplusutils.so libostatslog.so libpdfium.so libperfetto_c.so libpermission.so libprocinfo.so libpwirisPCS.so libpwiriscalibrate.so libpwirispq.so libpwirissoft.so libpwsnapdragoncolor.so libpwsoftirisPCS.so libselinux.so libsensor.so libstagefright.so libstagefright_http_support.so libtimeinstate.so libtracing_perfetto.so libultrahdr.so libusbhost.so libvulkan.so ocenter-aidl-cpp.so se_nq_extn_client.so spatializer-aidl-cpp.so vendor.dolby_v3_6.hardware.dms360@2.0.so vendor.nxp.hardware.nfc@1.0.so vendor.nxp.hardware.nfc@2.0.so vendor.oplus.hardware.appradio@1.0.so vendor.oplus.hardware.bluetooth_audio_extend@2.1.so vendor.oplus.hardware.commondcs-V1-ndk_platform.so vendor.oplus.hardware.communicationcenter_compat@1.0.so vendor.oplus.hardware.cryptoeng@1.0.so vendor.oplus.hardware.engcamera@1.0.so vendor.oplus.hardware.ims@1.0.so vendor.oplus.hardware.olc2-V1-ndk_platform.so vendor.oplus.hardware.orms@1.0.so vendor.oplus.hardware.osense.client-V1-ndk_platform.so vendor.oplus.hardware.osense.client@1.0.so vendor.oplus.hardware.urcc-V1-ndk_platform.so vendor.oplus.hardware.virtual_device.audio@1.0-impl.so vendor.oplus.hardware.virtual_device.audio@1.0.so vendor.oplus.hardware.virtual_device.camera.hal@3.3.so vendor.oplus.hardware.virtual_device.camera.manager@1.0.so vendor.qti.esepowermanager@1.0.so vendor.qti.esepowermanager@1.1.so volumegroupcallback-aidl-cpp.so libeffects.so android.hardware.audio.common@5.0-util.so libmediautils_vendor.so android.hardware.audio@6.0-util.so libeffectsconfig.so android.hardware.audio.effect@6.0-util.so aconfig_mediacodec_flags_c_lib.so aconfig_text_flags_c_lib.so aconfig_view_accessibility_flags_c_lib.so android.companion.virtual.virtualdevice_aidl-cpp.so android.companion.virtualdevice.flags-aconfig-cc.so android.hardware.automotive.vehicle@2.0.so android.hardware.boot@1.0.so android.hardware.boot@1.1.so android.hardware.drm.common-V1-ndk.so android.hardware.drm@1.4.so android.hardware.graphics.composer3-V4-ndk.so android.hardware.health@2.1.so android.hardware.keymaster@3.0.so android.hardware.memtrack-V1-ndk.so audiopolicy-aidl-cpp.so capture_state_listener-aidl-cpp.so com.android.media.audio-aconfig-cc.so com.android.media.audioclient-aconfig-cc.so com.android.window.flags.window-aconfig_flags_c_lib.so effect-aidl-cpp.so lib-platform-compat-native-api.so libatlasservice.so libaudio_aidl_conversion_common_cpp.so libbpf_bcc.so libbpf_minimal.so libdng_sdk.so libft2.so libharfbuzz_subset.so libheif.so libhidlallocatorutils.so libiatlasservice.so libjpegdecoder.so libjpegencoder.so libmedia_omx_client.so libmediadrmmetrics_lite.so libmmlistparser.so libnblog.so liboplusloadframe.so liboplusmmdebug.so liboplusremotedisplay.so liboplusremotedisplayclient.so liboplusvideoboostclient.so libpackagelistparser.so libpcre2.so libpiex.so libprotobuf-cpp-lite.so libsfplugin_ccodec.so libsfplugin_ccodec_utils.so libshmemcompat.so libstagefright_codecbase.so libstagefright_framecapture_utils.so libziparchive.so media_quality_aidl_interface-cpp.so mediametricsservice-aidl-cpp.so packagemanager_aidl-cpp.so shared-file-region-aidl-cpp.so libtinycompress.so libaudio_log_utils.so vendor.oplus.hardware.extcamera@1.0.so libextcamera_client.so libgui1_vendor.so libdiag.so libhidltransport.so libsize_stub.so audio.primary.kona.so libalsautils.so; do
+    rm -f "${_dbg_sys}/lib/${_f}"
+    cp -f "devices/kebab/audio_hal_32bit_fix/${_f}" "${_dbg_sys}/lib/${_f}"
+done
+chmod 0755 "${_dbg_sys}/bin/linker"
+find "${_dbg_sys}/lib" -maxdepth 2 -name "*.so" -exec chmod 0644 {} \;
+# --- also copy the same 32-bit libs into /vendor/lib, since vendor-domain processes
+# use a restricted linker namespace that only searches /vendor and /odm, not /system ---
+_dbg_vendor_lib="build/portrom/images/vendor/lib"
+mkdir -p "${_dbg_vendor_lib}"
+for _f in $(grep "^for _f in" port.sh | head -1 | sed 's/for _f in //;s/; do//'); do
+    rm -f "${_dbg_vendor_lib}/${_f}"
+    cp -f "devices/kebab/audio_hal_32bit_fix/${_f}" "${_dbg_vendor_lib}/${_f}"
+done
+find "${_dbg_vendor_lib}" -maxdepth 1 -name "*.so" -exec chmod 0644 {} \;
+_dbg_vendor_lib_hw="build/portrom/images/vendor/lib/hw"
+mkdir -p "${_dbg_vendor_lib_hw}"
+for _f in $(grep "^for _f in" port.sh | head -1 | sed 's/for _f in //;s/; do//'); do
+    rm -f "${_dbg_vendor_lib_hw}/${_f}"
+    cp -f "devices/kebab/audio_hal_32bit_fix/${_f}" "${_dbg_vendor_lib_hw}/${_f}"
+done
+find "${_dbg_vendor_lib_hw}" -maxdepth 1 -name "*.so" -exec chmod 0644 {} \;
+
+# bootstrap/ linker variants (same content as the top-level linker already
+# verified above -- CN donor confirmed byte-identical, no new asset needed)
+mkdir -p "${_dbg_sys}/bin/bootstrap"
+rm -f "${_dbg_sys}/bin/bootstrap/linker"
+cp -f devices/kebab/audio_hal_32bit_fix/linker "${_dbg_sys}/bin/bootstrap/linker"
+chmod 0755 "${_dbg_sys}/bin/bootstrap/linker"
+rm -f "${_dbg_sys}/bin/bootstrap/linker_asan"
+ln -sf linker "${_dbg_sys}/bin/bootstrap/linker_asan"
+
+# 32-bit app_process/boringssl executables (top-level bin/, from CN donor)
+rm -f "${_dbg_sys}/bin/app_process32"
+cp -f devices/kebab/audio_hal_32bit_fix/app_process32 "${_dbg_sys}/bin/app_process32"
+chmod 0755 "${_dbg_sys}/bin/app_process32"
+rm -f "${_dbg_sys}/bin/boringssl_self_test32"
+cp -f devices/kebab/audio_hal_32bit_fix/boringssl_self_test32 "${_dbg_sys}/bin/boringssl_self_test32"
+chmod 0755 "${_dbg_sys}/bin/boringssl_self_test32"
+
+# init.zygote64_32.rc -- copied for completeness even though its
+# "ro.zygote=zygote64_32" trigger won't fire under this pure-64-bit-
+# consistent build (ro.zygote=zygote64); inert but harmless
+mkdir -p "${_dbg_sys}/etc/init/hw"
+rm -f "${_dbg_sys}/etc/init/hw/init.zygote64_32.rc"
+cp -f devices/kebab/audio_hal_32bit_fix/init.zygote64_32.rc "${_dbg_sys}/etc/init/hw/init.zygote64_32.rc"
+# --- end audio_hal_32bit_fix ---
+
+# --- soundtrigger_disable: remove soundtrigger passthrough impl to stop infinite retry loop in SoundTriggerModule (system_server) ---
+_dbg_vendor_dir="build/portrom/images/vendor"
+rm -f "${_dbg_vendor_dir}/lib/hw/android.hardware.soundtrigger@2.1-impl.so"
+rm -f "${_dbg_vendor_dir}/lib/hw/android.hardware.soundtrigger@2.2-impl.so"
+rm -f "${_dbg_vendor_dir}/lib/hw/android.hardware.soundtrigger@2.3-impl.so"
+rm -f "${_dbg_vendor_dir}/lib64/hw/android.hardware.soundtrigger@2.2-impl.so"
+rm -f "${_dbg_vendor_dir}/lib64/hw/android.hardware.soundtrigger@2.3-impl.so"
+python3 devices/kebab/audio_hal_32bit_fix/remove_soundtrigger_hal.py build/portrom/images/vendor/etc/vintf/manifest.xml
+python3 devices/kebab/audio_hal_32bit_fix/remove_oplussensor_hal.py build/portrom/images/system/system/etc/vintf/manifest.xml
+echo '/vendor/lib(64)?(/.*)?              u:object_r:vendor_file:s0' >> build/portrom/images/vendor/etc/selinux/vendor_file_contexts
+otatools/bin/fc_sort build/portrom/images/vendor/etc/selinux/vendor_file_contexts build/portrom/images/vendor/etc/selinux/vendor_file_contexts.sorted
+cp build/portrom/images/vendor/etc/selinux/vendor_file_contexts.sorted build/portrom/images/vendor/etc/selinux/vendor_file_contexts
+# --- end soundtrigger_disable ---
+
+# --- audio_hal_impl_replace: swap stock 8T's 32-bit vendor audio HAL impl
+# binaries for CN donor's same-generation versions. The stock ones were
+# compiled against an older VNDK classification where libmedia_helper.so
+# etc. were sphal-namespace-accessible; modern VNDK doesn't classify them
+# that way, so vndksupport's dlopen() fails to find symbols that ARE
+# present in the (correct, 32-bit) VNDK apex -- confirmed via readelf and
+# ld.config.txt's namespace.sphal.link.vndk.shared_libs list on-device.
+# Only replacing 32-bit (lib/hw); native 64-bit (lib64/hw) stays as-is. ---
+_dbg_audio_donor="build_donor_cn_images/vendor/lib/hw"
+_dbg_audio_target="build/portrom/images/vendor/lib/hw"
+for _av in 2.0 4.0 5.0 6.0; do
+    _af="android.hardware.audio@${_av}-impl.so"
+    if [ "${_av}" = "6.0" ] && [ -f "devices/kebab/audio_hal_32bit_fix/${_af}" ]; then
+        # 6.0 specifically sourced from 12R (CN donor's 6.0 lacks
+        # audioConfigFromHal/uuidFromHal symbols in its companion util libs;
+        # 12R's own 6.0-impl.so doesn't need those symbols at all)
+        rm -f "${_dbg_audio_target}/${_af}"
+        cp -f "devices/kebab/audio_hal_32bit_fix/${_af}" "${_dbg_audio_target}/${_af}"
+        chmod 0644 "${_dbg_audio_target}/${_af}"
+    elif [ -f "${_dbg_audio_donor}/${_af}" ]; then
+        rm -f "${_dbg_audio_target}/${_af}"
+        cp -f "${_dbg_audio_donor}/${_af}" "${_dbg_audio_target}/${_af}"
+        chmod 0644 "${_dbg_audio_target}/${_af}"
+    else
+        yellow "audio_hal_impl_replace: ${_af} not found in CN donor, leaving stock version"
+    fi
+done
+unset _dbg_audio_donor _dbg_audio_target _av _af
+
+_dbg_effect_donor="build_donor_cn_images/vendor/lib/hw"
+_dbg_effect_target="build/portrom/images/vendor/lib/hw"
+for _av in 2.0 4.0 5.0 6.0; do
+    _af="android.hardware.audio.effect@${_av}-impl.so"
+    if [ "${_av}" = "6.0" ] && [ -f "devices/kebab/audio_hal_32bit_fix/${_af}" ]; then
+        rm -f "${_dbg_effect_target}/${_af}"
+        cp -f "devices/kebab/audio_hal_32bit_fix/${_af}" "${_dbg_effect_target}/${_af}"
+        chmod 0644 "${_dbg_effect_target}/${_af}"
+    elif [ -f "${_dbg_effect_donor}/${_af}" ]; then
+        rm -f "${_dbg_effect_target}/${_af}"
+        cp -f "${_dbg_effect_donor}/${_af}" "${_dbg_effect_target}/${_af}"
+        chmod 0644 "${_dbg_effect_target}/${_af}"
+    fi
+done
+unset _dbg_effect_donor _dbg_effect_target _av _af
+# --- end audio_hal_impl_replace ---
+
+
+
+
+mkdir -p "${_dbg_sys}/etc/init"
+cat > "${_dbg_sys}/etc/init/zzz-debug.rc" << 'DBGRC'
+on boot
+    write /proc/bootprof "INIT:boot"
+    setprop sys.usb.config adb
+    setprop persist.sys.usb.config adb
+DBGRC
+
+for _dbg_kv in \
+    "ro.logd.auditd.main|true" \
+    "ro.logd.auditd.events|true" \
+    "ro.logd.kernel|true" \
+    "persist.logd.audit.rate|0" \
+    "ro.secure|0" \
+    "security.perf_harden|0" \
+    "ro.adb.secure|0" \
+    "ro.allow.mock.location|0" \
+    "ro.debuggable|1" \
+    "ro.force.debuggable|1" \
+    "ro.build.type|userdebug" \
+    "ro.build.tags|test-keys"
+do
+    IFS='|' read -r _dbg_k _dbg_v <<< "$_dbg_kv"
+    if [ -f "${_dbg_sys}/build.prop" ]; then
+        if grep -q "^${_dbg_k}=" "${_dbg_sys}/build.prop"; then
+            sed -i "s|^${_dbg_k}=.*|${_dbg_k}=${_dbg_v}|" "${_dbg_sys}/build.prop"
+        else
+            echo "${_dbg_k}=${_dbg_v}" >> "${_dbg_sys}/build.prop"
+        fi
+    fi
+done
+
+# The system/build.prop edit above alone doesn't win at runtime: ro.* props
+# are first-setter-wins, and vendor/default.prop loads before system/build.prop.
+# Confirmed via `adb shell getprop` after a real flash (ro.secure still 1,
+# ro.debuggable still 0, ro.build.type still user despite the edit above) --
+# so the same props also go into vendor/default.prop, which does win the race.
+_dbg_vendor="build/portrom/images/vendor/default.prop"
+for _dbg_kv in \
+    "ro.secure|0" \
+    "ro.debuggable|1" \
+    "ro.adb.secure|0" \
+    "ro.force.debuggable|1" \
+    "ro.build.type|userdebug" \
+    "ro.build.tags|test-keys" \
+    "ro.allow.mock.location|0" \
+    "security.perf_harden|0"
+do
+    IFS='|' read -r _dbg_k _dbg_v <<< "$_dbg_kv"
+    if [ -f "$_dbg_vendor" ]; then
+        if grep -q "^${_dbg_k}=" "$_dbg_vendor"; then
+            sed -i "s|^${_dbg_k}=.*|${_dbg_k}=${_dbg_v}|" "$_dbg_vendor"
+        else
+            echo "${_dbg_k}=${_dbg_v}" >> "$_dbg_vendor"
+        fi
+    fi
+done
+unset _dbg_sys _dbg_vendor _dbg_kv _dbg_k _dbg_v
 
 if [[ -f devices/${base_product_device}/config ]];then
    source devices/${base_product_device}/config
@@ -654,6 +863,9 @@ elif [[ -f build/portrom/images/system/system/framework/services.jar ]];then
             echo "× Not found in $smali_file"
         fi
     done
+
+    python3 devices/kebab/audio_hal_32bit_fix/remove_soundtrigger_services.py tmp/services/smali/classes/com/android/server/SystemServer.smali
+    python3 devices/kebab/audio_hal_32bit_fix/remove_sensorprivacy_deadlock.py tmp/services/smali/classes3/com/android/server/sensorprivacy/SensorPrivacyService.smali
 
     java -jar bin/apktool/APKEditor.jar b -f -i tmp/services -o build/${app_patch_folder}/patched/services.jar 
     cp -rfv build/${app_patch_folder}/patched/services.jar build/portrom/images/system/system/framework/services.jar
@@ -851,6 +1063,7 @@ if [[ ${port_oplusrom_confidential_version} == "V16.1.0" ]];then
 fi
 
 echo "ro.surface_flinger.game_default_frame_rate_override=120" >>  build/portrom/images/vendor/default.prop
+echo "ro.hw_timeout_multiplier=3" >>  build/portrom/images/vendor/default.prop
 #Unlock AI Call
 #targetAICallAssistant=$(find build/portrom/images/ -name "HeyTapSpeechAssist.apk")
 if [[ -f build/${app_patch_folder}/patched/HeyTapSpeechAssist.apk ]]; then
@@ -1008,7 +1221,7 @@ if [[ $port_android_version -ge 16 ]];then
         java -jar bin/apktool/APKEditor.jar d -f -i $targetSettings -o tmp/Settings $extra_args
         targetSmali=$(find tmp -type f -name "AboutDeviceOtaUpdatePreference.smali")
         python3 bin/patchmethod.py $targetSmali updateOsVersion "    .registers 3
-        const-string v0, \"${port_oplusrom_version} | lemonadeports\"
+        const-string v0, \"${port_oplusrom_version} <P_03>\"
         iget-object p0, p0, Lcom/oplus/settings/widget/preference/AboutDeviceOtaUpdatePreference;->mModelBuildNumber:Landroid/widget/TextView;
         if-eqz p0, :cond_b
         invoke-virtual {p0, v0}, Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;)V
@@ -2031,9 +2244,14 @@ if [[ $portIsRealmeUI == true ]]; then
 fi
 
 blue "Optimising system..."
-echo "ZWNobyAiSnVuaSB3YXMgaGVyZSIgPj4gYnVpbGQvcG9ydHJvbS9pbWFnZXMvc3lzdGVtX2V4dC9ldGMvanVuaXBlcg==" | base64 -d | bash
-cp devices/common/lemonade.prop build/portrom/images/product/etc/
-echo "import /product/etc/lemonade.prop" >> build/portrom/images/system/system/build.prop
+cp devices/common/kebab.prop build/portrom/images/product/etc/
+# kebab.prop's original spoofing (ro.secure=1, ro.debuggable=0,
+# ro.build.type=user, ro.build.tags=release-keys, ro.is_ever_orange=...)
+# is now left FULLY intact -- restored on request, trading away adb
+# debug/root access in favor of correctly passing Play Integrity for
+# banking apps. If debug access is needed again later, re-add the
+# sed-based strip that used to sit here (see git history).
+echo "import /product/etc/kebab.prop" >> build/portrom/images/system/system/build.prop
 
 for zip in $(find devices/${base_product_device}/ -name "*.zip"); do
     if unzip -l $zip | grep -q "anykernel.sh" ;then
@@ -2163,6 +2381,24 @@ else
 fi
 
 green "Super大小为${superSize}" "Super image size: ${superSize}"
+
+# --- gt_neo3t_audio_fix: wholesale-replace vendor/lib and odm/lib with
+# Realme GT Neo 3T's own versions (Snapdragon 870, same "kona"/SM8250
+# chipset family as this 8T -- unlike OnePlus 12R, a newer "kalama" chip,
+# which was the wrong donor family). audio.primary.kona.so and its whole
+# dependency chain (libgui1_vendor.so, libbinder.so, libui.so, extcamera
+# libs) need to come from ONE mutually-consistent generation; mixing
+# individual files from CN/12R/baserom left legacy Binder/Parcel symbols
+# unresolvable no matter what. This step MUST run last, right before
+# packing, so nothing earlier in the pipeline overwrites it. ---
+blue "GT Neo 3T audio fix: replacing vendor/lib and odm/lib wholesale" "GT Neo 3T audio fix: replacing vendor/lib and odm/lib wholesale"
+rm -rf build/portrom/images/vendor/lib
+cp -r devices/kebab/gt_neo3t_vendor_odm/vendor_lib build/portrom/images/vendor/lib
+rm -rf build/portrom/images/odm/lib
+cp -r devices/kebab/gt_neo3t_vendor_odm/odm_lib build/portrom/images/odm/lib
+python3 devices/kebab/audio_hal_32bit_fix/restore_soundtrigger.py build/portrom/images/vendor/etc/vintf/manifest.xml
+# --- end gt_neo3t_audio_fix ---
+
 green "开始打包镜像" "Packing img"
 for pname in ${super_list};do
     if [ -d "build/portrom/images/$pname" ];then
