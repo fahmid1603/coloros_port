@@ -40,7 +40,7 @@
     sudo apt upgrade
     sudo apt install git -y
     # Clone project
-    git clone https://github.com/toraidl/coloros_port.git
+    git clone -b 8T-pedestrian-fix https://github.com/fahmid1603/coloros_port.git
     cd coloros_port
     # Install dependencies
     ./setup.sh
@@ -53,7 +53,7 @@ WSL may work, but it is advised to use Linux on bare metal to maximise performan
     sudo pacman -Syu git # Always keep your computer up to date!
     # yay will automatically install if it's not on your system
     # Clone project
-    git clone https://github.com/toraidl/coloros_port.git
+    git clone -b 8T-pedestrian-fix https://github.com/fahmid1603/coloros_port.git
     cd coloros_port
     # Install dependencies
     sudo ./setup.sh
