@@ -1216,7 +1216,7 @@ targetSettings=$(find build/portrom/images/ -name "Settings.apk")
 
 if [[ $port_android_version -ge 16 ]];then
     if [[ -f $targetSettings ]];then
-        blue "Adding credits to ROM version (shoutout to tg/tenseimods!)"
+        blue "WHICH FAVOR OF YOUR LORD WILL YOU DENY??"
         cp -rf $targetSettings tmp/$(basename $targetSettings).bak
         java -jar bin/apktool/APKEditor.jar d -f -i $targetSettings -o tmp/Settings $extra_args
         targetSmali=$(find tmp -type f -name "AboutDeviceOtaUpdatePreference.smali")
