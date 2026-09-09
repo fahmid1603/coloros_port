@@ -70,7 +70,7 @@ WSL may work, but it is advised to use Linux on bare metal to maximise performan
 - baserom, portrom and portrom2 can be a direct download link. OTAs can be acquired from sources like [Daniel Springer's OTA downloader.](https://roms.danielspringer.at/index.php?view=ota). If needed, downloadCheck links can be resolved for both portrom and portrom2.
 
 ## Credits
-> In this project, some or all of the content is derived from the following open-source projects. Special thanks to the developers of these projects.
+> In this project, some or all of the content is derived from the following open-source projects. Special thanks to the developers of these projects (if even I have forgotten to mention someone)
 
 - [「BypassSignCheck」by Weverses](https://github.com/Weverses/BypassSignCheck)
 - [「contextpatch」 by ColdWindScholar](https://github.com/ColdWindScholar/TIK)
