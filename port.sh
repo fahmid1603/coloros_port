@@ -2399,6 +2399,14 @@ cp -r devices/kebab/gt_neo3t_vendor_odm/odm_lib build/portrom/images/odm/lib
 python3 devices/kebab/audio_hal_32bit_fix/restore_soundtrigger.py build/portrom/images/vendor/etc/vintf/manifest.xml
 # --- end gt_neo3t_audio_fix ---
 
+# --- subsys_daemon dual-SIM race-condition fix: the stock subsys_daemon.rc
+# starts both qti-modem-daemon-0 and qti-modem-daemon-1 back-to-back with
+# no ordering in the dsds trigger, causing one slot's SIM to randomly fail
+# to reach LOADED state on some boots. Chain daemon-1's start through a
+# synthetic property so it's queued strictly after daemon-0's start. ---
+python3 devices/kebab/audio_hal_32bit_fix/patch_subsys_race.py build/portrom/images/odm/etc/init/subsys_daemon.rc
+# --- end subsys_daemon race fix ---
+
 green "开始打包镜像" "Packing img"
 for pname in ${super_list};do
     if [ -d "build/portrom/images/$pname" ];then
